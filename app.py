@@ -9,10 +9,12 @@ from routes.admin_signup_routes import admin_signup_bp
 from routes.tracking import tracking_bp
 from flask import Flask, render_template
 from init_db import init_db
+from datetime import timedelta
 
 app = Flask(__name__)
 app.config.from_object(Config)  # load configs
-
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=7)
+app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(days=30)
 jwt = JWTManager(app)
 
 # Initialize database
