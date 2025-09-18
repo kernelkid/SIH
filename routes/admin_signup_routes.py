@@ -1,39 +1,46 @@
 from flask import Blueprint, request, jsonify
-import hashlib
-from models.user_model import users  # your existing users list or DB
+from init_db import db
+from models.admin_model import Admin
+import os
+from dotenv import load_dotenv
+
+# Load .env variables
+load_dotenv()
 
 admin_signup_bp = Blueprint("admin_signup", __name__)
 
-# Secret key only known to existing admins
-ADMIN_CREATION_KEY = "super-secret-admin-key-123"
+# Secret key loaded from .env
+ADMIN_CREATION_KEY = os.getenv("ADMIN_CREATION_KEY")
 
 @admin_signup_bp.route('/create_admin', methods=['POST'])
 def create_admin():
-    data = request.get_json()
-    if not data:
-        return jsonify({"error": "Invalid JSON"}), 400
+    try:
+        data = request.get_json(force=True)
+        if not data:
+            return jsonify({"error": "Invalid JSON"}), 400
 
-    secret_key = data.get("secret_key")
-    if secret_key != ADMIN_CREATION_KEY:
-        return jsonify({"error": "Unauthorized"}), 403
+        # Secret key validation
+        if data.get("secret_key") != ADMIN_CREATION_KEY:
+            return jsonify({"error": "Unauthorized. Secret key invalid."}), 403
 
-    username = data.get("username")
-    email = data.get("email")
-    password = data.get("password")
+        email = data.get("email")
+        password = data.get("password")
 
-    # Hash the password
-    hashed_password = hashlib.sha256(password.encode()).hexdigest()
+        # Basic field validation
+        if not email or not password:
+            return jsonify({"error": "username, email, and password are required"}), 400
 
-    # Create admin user
-    new_admin = {
-        "id": len(users) + 1,
-        "username": username,
-        "email": email,
-        "password": hashed_password,
-        "role": "admin",
-        "consent": True
-    }
+        # Check if admin already exists
+        if Admin.query.filter_by(email=email).first():
+            return jsonify({"error": "Admin with this email already exists"}), 400
 
-    users.append(new_admin)
+        # Create new admin
+        new_admin = Admin(email=email, password=password)
+        db.session.add(new_admin)
+        db.session.commit()
 
-    return jsonify({"message": "Admin created successfully", "admin": new_admin}), 201
+        return jsonify({"message": "Admin created successfully", "admin": new_admin.to_dict()}), 201
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": "Something went wrong", "details": str(e)}), 500

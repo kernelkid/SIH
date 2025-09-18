@@ -1,83 +1,60 @@
 from flask import Blueprint, request, jsonify, redirect
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
-from models.user_model import users, User
+from models.user_model import User
 from config import Config
 import requests
 import google.auth.transport.requests
 from google_auth_oauthlib.flow import Flow
 import google.oauth2.id_token
+from init_db import db
 
 auth_bp = Blueprint("auth", __name__)
 
-# ✅ Signup
+# ✅ Signup route
 @auth_bp.route("/signup", methods=["POST"])
 def signup():
-    data = request.json
-    email = data.get("email")
-    password = data.get("password")
+    try:
+        data = request.get_json(force=True)
+        email = data.get("email")
+        password = data.get("password")
 
-    if any(u.email == email for u in users):
-        return jsonify({"error": "User already exists"}), 400
+        # Basic validation
+        if not email or not password:
+            return jsonify({"error": "Email and password are required"}), 400
 
-    new_user = User(email=email, password=password)
-    users.append(new_user)
-    return jsonify({"message": "User created successfully"}), 201
+        # Check if user already exists
+        if User.query.filter_by(email=email).first():
+            return jsonify({"error": "User already exists"}), 400
 
-# ✅ Login
+        # Create new user
+        new_user = User(email=email, password=password)
+        db.session.add(new_user)
+        db.session.commit()
+
+        return jsonify({"message": "User created successfully", "user": new_user.to_dict()}), 201
+
+    except Exception as e:
+        db.session.rollback()  # rollback in case of DB error
+        return jsonify({"error": "Something went wrong", "details": str(e)}), 500
+
+# ✅ Login route
 @auth_bp.route("/login", methods=["POST"])
 def login():
-    data = request.json
-    email = data.get("email")
-    password = data.get("password")
+    try:
+        data = request.get_json(force=True)
+        email = data.get("email")
+        password = data.get("password")
 
-    user = next((u for u in users if u.email == email), None)
-    if user and user.check_password(password):
-        access_token = create_access_token(identity=email)
-        return jsonify({"access_token": access_token}), 200
-    return jsonify({"error": "Invalid credentials"}), 401
+        if not email or not password:
+            return jsonify({"error": "Email and password are required"}), 400
 
-# ✅ Protected Profile
-@auth_bp.route("/profile", methods=["GET"])
-@jwt_required()
-def profile():
-    current_user = get_jwt_identity()
-    return jsonify({"message": f"Welcome {current_user}!"})
+        # Fetch user from DB
+        user = User.query.filter_by(email=email).first()
+        if user and user.check_password(password):
+            access_token = create_access_token(identity=user.user_id)
+            return jsonify({"access_token": access_token, "user": user.to_dict()}), 200
 
-# ✅ Google OAuth
-flow = Flow.from_client_config(
-    {
-        "web": {
-            "client_id": Config.GOOGLE_CLIENT_ID,
-            "client_secret": Config.GOOGLE_CLIENT_SECRET,
-            "redirect_uris": [Config.GOOGLE_REDIRECT_URI],
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "https://oauth2.googleapis.com/token"
-        }
-    },
-    scopes=["openid", "https://www.googleapis.com/auth/userinfo.email"],
-    redirect_uri=Config.GOOGLE_REDIRECT_URI
-)
+        return jsonify({"error": "Invalid credentials"}), 401
 
-@auth_bp.route("/google-login")
-def google_login():
-    auth_url, _ = flow.authorization_url(prompt="consent")
-    return redirect(auth_url)
-
-@auth_bp.route("/callback")
-def callback():
-    flow.fetch_token(authorization_response=request.url)
-
-    credentials = flow.credentials
-    token_request = google.auth.transport.requests.Request()
-    id_info = google.oauth2.id_token.verify_oauth2_token(
-        credentials._id_token, token_request, Config.GOOGLE_CLIENT_ID
-    )
-
-    email = id_info.get("email")
-    user = next((u for u in users if u.email == email), None)
-    if not user:
-        user = User(email=email, google_id=id_info["sub"])
-        users.append(user)
-
-    access_token = create_access_token(identity=email)
-    return jsonify({"access_token": access_token, "email": email})
+    except Exception as e:
+        return jsonify({"error": "Something went wrong", "details": str(e)}), 500

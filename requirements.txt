@@ -3,3 +3,5 @@ flask-jwt-extended
 google-auth
 google-auth-oauthlib
 werkzeug
+flask-sqlalchemy
+psycopg2-binary
