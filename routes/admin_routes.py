@@ -312,7 +312,6 @@ def create_user():
     
 
 
- Optional: Update user endpoint
 @admin_bp.route('/users/<int:user_id>', methods=['PUT'])
 @admin_required
 def update_user(user_id):
@@ -366,3 +365,105 @@ def update_user(user_id):
         db.session.rollback()
         logger.error(f"Failed to update user {user_id}: {e}")
         return jsonify({"error": "Failed to update user", "details": str(e)}), 500
+    
+
+
+# Delete specific trip by trip number
+@admin_bp.route('/trips/<trip_number>', methods=['DELETE'])
+@admin_required
+def delete_trip(trip_number):
+    try:
+        trip = Trip.query.filter_by(trip_number=trip_number).first()
+        if not trip:
+            return jsonify({"error": "Trip not found"}), 404
+        
+        # Store trip info before deletion
+        trip_data = {
+            "trip_number": trip.trip_number,
+            "database_id": trip.id,
+            "user_id": trip.user_id,
+            "user_string_id": None,
+            "user_email": None
+        }
+        
+        # Get user information for logging
+        user = User.query.get(trip.user_id)
+        if user:
+            trip_data["user_string_id"] = user.user_id
+            trip_data["user_email"] = user.email
+        
+        # Delete associated location and motion data for this trip
+        # (Assuming you have trip-specific tracking data)
+        deleted_locations = 0
+        deleted_motions = 0
+        
+        # If you have trip_id foreign keys in LocationData/MotionData
+        # location_data = LocationData.query.filter_by(trip_id=trip.id).all()
+        # motion_data = MotionData.query.filter_by(trip_id=trip.id).all()
+        
+        # For now, we'll just delete the trip itself
+        # You might want to add cascade deletion for related data
+        
+        db.session.delete(trip)
+        db.session.commit()
+        
+        logger.info(f"Successfully deleted trip {trip_number} (ID: {trip.id}) for user {trip_data['user_string_id']}")
+        
+        return jsonify({
+            "message": f"Trip {trip_number} deleted successfully",
+            "deleted_trip": {
+                "trip_number": trip_data["trip_number"],
+                "database_id": trip_data["database_id"],
+                "user_id": trip_data["user_string_id"],
+                "user_email": trip_data["user_email"],
+                "associated_data": {
+                    "locations": deleted_locations,
+                    "motions": deleted_motions
+                }
+            }
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Failed to delete trip {trip_number}: {e}")
+        return jsonify({"error": "Failed to delete trip", "details": str(e)}), 500
+
+
+# Optional: Delete trip by database ID (alternative endpoint)
+@admin_bp.route('/trips/id/<int:trip_id>', methods=['DELETE'])
+@admin_required
+def delete_trip_by_id(trip_id):
+    try:
+        trip = Trip.query.get(trip_id)
+        if not trip:
+            return jsonify({"error": "Trip not found"}), 404
+        
+        trip_number = trip.trip_number
+        user_id = trip.user_id
+        
+        # Get user info
+        user = User.query.get(user_id)
+        user_info = {
+            "user_string_id": user.user_id if user else None,
+            "user_email": user.email if user else None
+        }
+        
+        db.session.delete(trip)
+        db.session.commit()
+        
+        logger.info(f"Successfully deleted trip ID {trip_id} ({trip_number}) for user {user_info['user_string_id']}")
+        
+        return jsonify({
+            "message": f"Trip {trip_number} (ID: {trip_id}) deleted successfully",
+            "deleted_trip": {
+                "trip_number": trip_number,
+                "database_id": trip_id,
+                "user_id": user_info["user_string_id"],
+                "user_email": user_info["user_email"]
+            }
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Failed to delete trip ID {trip_id}: {e}")
+        return jsonify({"error": "Failed to delete trip", "details": str(e)}), 500
