@@ -206,6 +206,8 @@ def get_database_stats():
     except Exception as e:
         logger.error(f"Failed to get database stats: {e}")
         return jsonify({"error": "Failed to get database statistics"}), 500
+    
+
 
 # Search users
 @admin_bp.route('/users/search', methods=['GET'])
@@ -247,3 +249,63 @@ def search_users():
     except Exception as e:
         logger.error(f"User search failed: {e}")
         return jsonify({"error": "Search failed"}), 500
+    
+
+
+# Add this to your admin_bp routes
+
+@admin_bp.route('/users', methods=['POST'])
+@admin_required
+def create_user():
+    try:
+        data = request.get_json()
+        
+        # Validate required fields
+        email = data.get('email')
+        password = data.get('password')
+        
+        if not email or not password:
+            return jsonify({"error": "Email and password are required"}), 400
+        
+        # Check if user already exists
+        existing_user = User.query.filter_by(email=email).first()
+        if existing_user:
+            return jsonify({"error": "User with this email already exists"}), 409
+        
+        # Optional fields with defaults
+        first_name = data.get('first_name', '')
+        last_name = data.get('last_name', '')
+        phone_number = data.get('phone_number', '')
+        is_admin = data.get('is_admin', False)  # Admin can create other admins
+        
+        # Create new user
+        new_user = User(
+            email=email,
+            first_name=first_name,
+            last_name=last_name,
+            phone_number=phone_number,
+            is_admin=is_admin
+        )
+        
+        # Set password (assuming your User model has a set_password method)
+        new_user.set_password(password)
+        
+        # Save to database
+        db.session.add(new_user)
+        db.session.commit()
+        
+        logger.info(f"Admin created new user: {new_user.user_id} ({email})")
+        
+        # Return user data (excluding password)
+        user_data = new_user.to_dict()
+        user_data["id"] = new_user.id  # Include database ID for admin operations
+        
+        return jsonify({
+            "message": "User created successfully",
+            "user": user_data
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Failed to create user: {e}")
+        return jsonify({"error": "Failed to create user", "details": str(e)}), 500
