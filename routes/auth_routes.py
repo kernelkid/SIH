@@ -1,11 +1,6 @@
 from flask import Blueprint, request, jsonify, redirect
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 from models.user_model import User
-from config import Config
-import requests
-import google.auth.transport.requests
-from google_auth_oauthlib.flow import Flow
-import google.oauth2.id_token
 from init_db import db
 
 auth_bp = Blueprint("auth", __name__)
@@ -51,7 +46,7 @@ def login():
         # Fetch user from DB
         user = User.query.filter_by(email=email).first()
         if user and user.check_password(password):
-            access_token = create_access_token(identity=user.user_id)
+            access_token = create_access_token(identity=user.email)
             return jsonify({"access_token": access_token, "user": user.to_dict()}), 200
 
         return jsonify({"error": "Invalid credentials"}), 401

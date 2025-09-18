@@ -13,11 +13,10 @@ class Trip(db.Model):
     end_time = db.Column(db.String(50), nullable=False)
     mode_of_travel = db.Column(db.String(50), nullable=False)
     vehicle_type = db.Column(db.String(50))
-    fuel_type = db.Column(db.String(50))
     accompanying_travellers = db.Column(db.JSON)  # Store as JSON array
 
-    # NEW: Link trip to a user
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+
 
     def __init__(self, origin, destination, start_time, end_time,
                  mode_of_travel, vehicle_type=None, fuel_type=None,

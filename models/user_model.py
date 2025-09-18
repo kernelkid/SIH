@@ -10,6 +10,8 @@ class User(db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(400), nullable=False)
 
+    trips = db.relationship("Trip", backref="user", lazy=True)
+
     def __init__(self, email, password=None, password_hash=None, user_id=None):
         self.user_id = user_id or f"USER-{random.randint(1000, 9999)}"
         self.email = email

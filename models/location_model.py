@@ -5,7 +5,7 @@ class LocationData(db.Model):
     __tablename__ = 'location_data'
     
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     latitude = db.Column(db.Float, nullable=False)
     longitude = db.Column(db.Float, nullable=False)
     accuracy = db.Column(db.Float)
@@ -73,7 +73,7 @@ class MotionData(db.Model):
     __tablename__ = 'motion_data'
     
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     
     # DeviceMotionEvent data
     acceleration_x = db.Column(db.Float)

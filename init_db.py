@@ -16,12 +16,9 @@ def init_db(app: Flask, force: bool = False):
     db.init_app(app)
 
     with app.app_context():
-        if force:
-            db.drop_all()
-            print("Dropped all existing tables.")
-        # Only creates tables that don't exist
-        db.create_all()
         print("Database initialized successfully!")
+
+
     # with app.app_context():
     #     db.drop_all()
     #     db.create_all()

@@ -9,11 +9,32 @@ trip_bp = Blueprint("trip", __name__)
 
 # --- Add Trip ---
 @trip_bp.route('/add_trip', methods=['POST'])
+@jwt_required() 
 def add_trip():
     try:
         data = request.get_json(force=True)
-        if not data:
-            return jsonify({"error": "Invalid JSON"}), 400
+        current_user_email = get_jwt_identity()
+        
+        # Debug: Print exactly what we're looking for
+        print(f"DEBUG: JWT email: '{current_user_email}'")
+        print(f"DEBUG: Email length: {len(current_user_email)}")
+        print(f"DEBUG: Email repr: {repr(current_user_email)}")
+        
+        # Try to find user (case insensitive)
+        user = User.query.filter(User.email.ilike(current_user_email.strip().lower())).first()
+        print(f"DEBUG: User found: {user}")
+        
+        if not user:
+            # Try exact match as backup
+            user = User.query.filter_by(email=current_user_email).first()
+            print(f"DEBUG: Exact match user: {user}")
+        
+        if not user:
+            return jsonify({
+                "error": "User not found", 
+                "debug_email": current_user_email,
+                "debug_length": len(current_user_email)
+            }), 404
 
         # Required fields validation
         required_fields = ["origin", "destination", "start_time", "end_time", "mode_of_travel"]
@@ -28,7 +49,7 @@ def add_trip():
         except ValueError:
             return jsonify({"error": "start_time and end_time must be ISO format (YYYY-MM-DDTHH:MM:SS)"}), 400
 
-        # Create Trip object
+        # Create Trip object with INTEGER user ID
         trip = Trip(
             origin=data["origin"],
             destination=data["destination"],
@@ -37,7 +58,8 @@ def add_trip():
             mode_of_travel=data["mode_of_travel"],
             vehicle_type=data.get("vehicle_type"),
             fuel_type=data.get("fuel_type"),
-            accompanying_travellers=data.get("accompanying_travellers", [])
+            accompanying_travellers=data.get("accompanying_travellers", []),
+            user_id=user.id  # Use INTEGER ID, not EMAIL
         )
 
         db.session.add(trip)

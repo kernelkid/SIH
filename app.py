@@ -6,7 +6,7 @@ from routes.consent_routes import consent_bp
 from routes.trip_routes import trip_bp
 from routes.admin_routes import admin_bp
 from routes.admin_signup_routes import admin_signup_bp
-from routes.admin_signup_routes import tracking_bp
+from routes.tracking import tracking_bp
 from flask import Flask, render_template
 from init_db import init_db
 
@@ -22,7 +22,7 @@ init_db(app)
 app.register_blueprint(auth_bp, url_prefix="/auth")
 app.register_blueprint(consent_bp, url_prefix="/user")
 app.register_blueprint(trip_bp, url_prefix="/")
-app.register_blueprint(admin_bp, url_prefix="/")
+app.register_blueprint(admin_bp, url_prefix="/admin")
 app.register_blueprint(admin_signup_bp, url_prefix="/")
 app.register_blueprint(tracking_bp, url_prefix="/")
 
