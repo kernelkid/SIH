@@ -309,3 +309,60 @@ def create_user():
         db.session.rollback()
         logger.error(f"Failed to create user: {e}")
         return jsonify({"error": "Failed to create user", "details": str(e)}), 500
+    
+
+
+ Optional: Update user endpoint
+@admin_bp.route('/users/<int:user_id>', methods=['PUT'])
+@admin_required
+def update_user(user_id):
+    try:
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        
+        data = request.get_json()
+        
+        # Update allowed fields
+        if 'email' in data:
+            # Check if new email already exists (excluding current user)
+            existing_user = User.query.filter(
+                User.email == data['email'],
+                User.id != user_id
+            ).first()
+            if existing_user:
+                return jsonify({"error": "Email already exists"}), 409
+            user.email = data['email']
+        
+        if 'first_name' in data:
+            user.first_name = data['first_name']
+        
+        if 'last_name' in data:
+            user.last_name = data['last_name']
+        
+        if 'phone_number' in data:
+            user.phone_number = data['phone_number']
+        
+        if 'is_admin' in data:
+            user.is_admin = data['is_admin']
+        
+        # Handle password update separately
+        if 'password' in data and data['password']:
+            user.set_password(data['password'])
+        
+        db.session.commit()
+        
+        logger.info(f"Admin updated user: {user.user_id} ({user.email})")
+        
+        user_data = user.to_dict()
+        user_data["id"] = user.id
+        
+        return jsonify({
+            "message": "User updated successfully",
+            "user": user_data
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Failed to update user {user_id}: {e}")
+        return jsonify({"error": "Failed to update user", "details": str(e)}), 500
