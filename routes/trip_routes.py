@@ -1,6 +1,8 @@
 from flask import Blueprint, request, jsonify
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from models.trip_model import Trip
 from init_db import db
+from models.user_model import User 
 from datetime import datetime
 
 trip_bp = Blueprint("trip", __name__)
@@ -48,11 +50,30 @@ def add_trip():
         return jsonify({"error": "Something went wrong", "details": str(e)}), 500
 
 
-# --- Get All Trips ---
-@trip_bp.route('/all_trips', methods=['GET'])
-def get_all_trips():
+# Get all trips of the logged-in user
+@trip_bp.route("/my-trips", methods=["GET"])
+@jwt_required()
+def get_my_trips():
     try:
-        trips = Trip.query.all()
-        return jsonify({"trips": [trip.to_dict() for trip in trips]}), 200
+        # Get current user's email (or id) from JWT
+        current_user_email = get_jwt_identity()
+        
+        # Find user in DB
+        user = User.query.filter_by(email=current_user_email).first()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        
+        # Get all trips of this user
+        trips = Trip.query.filter_by(user_id=user.id).all()
+        
+        # Convert trips to dict
+        trips_list = [trip.to_dict() for trip in trips]
+        
+        return jsonify({
+            "user": user.email,
+            "total_trips": len(trips_list),
+            "trips": trips_list
+        }), 200
+    
     except Exception as e:
-        return jsonify({"error": "Something went wrong", "details": str(e)}), 500
+        return jsonify({"error": str(e)}), 500
