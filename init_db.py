@@ -15,11 +15,11 @@ def init_db(app: Flask, force: bool = False):
     app.config.from_object(Config)
     db.init_app(app)
 
-    # with app.app_context():
-    #     print("Database initialized successfully!")
-
     with app.app_context():
-        db.drop_all()
-        db.create_all()
-        print("Database reset successfully!")
+        print("Database initialized successfully!")
+
+    # with app.app_context():
+    #     db.drop_all()
+    #     db.create_all()
+    #     print("Database reset successfully!")
 
