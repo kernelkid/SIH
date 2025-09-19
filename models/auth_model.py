@@ -1,3 +1,5 @@
+
+# auth_model.py
 from werkzeug.security import generate_password_hash, check_password_hash
 from init_db import db
 import random

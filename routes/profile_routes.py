@@ -1,11 +1,11 @@
-from flask import request, jsonify
+# profile_routes.py
+from flask import request, jsonify, Blueprint
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from models.auth_model import Auth
 from models.user_model import User
 from init_db import db
 import re
 from datetime import datetime
-from flask import Blueprint
 
 profile_bp = Blueprint('profile', __name__)
 
@@ -14,14 +14,15 @@ profile_bp = Blueprint('profile', __name__)
 def get_profile():
     """Get current user's profile information"""
     try:
-        # Get user ID from JWT token
+        # Get user_id from JWT token
         current_user_id = get_jwt_identity()
-        auth = Auth.query.filter_by(user_id=current_user_id).first()
         
+        # Find auth record by user_id
+        auth = Auth.query.filter_by(user_id=current_user_id).first()
         if not auth or not auth.user:
             return jsonify({"error": "User not found"}), 404
         
-        # Return user profile (includes sensitive data for the user themselves)
+        # Return user profile
         return jsonify({
             "message": "Profile retrieved successfully",
             "user": auth.user.to_dict(include_sensitive=True)
@@ -37,13 +38,14 @@ def update_profile():
     try:
         data = request.get_json(force=True)
         
-        # Get user ID from JWT token
+        # Get user_id from JWT token
         current_user_id = get_jwt_identity()
-        auth = Auth.query.filter_by(user_id=current_user_id).first()
         
+        # Find auth record by user_id
+        auth = Auth.query.filter_by(user_id=current_user_id).first()
         if not auth or not auth.user:
             return jsonify({"error": "User not found"}), 404
-        
+            
         user = auth.user
         
         # Fields that can be updated
@@ -83,7 +85,7 @@ def update_profile():
                     # Check if Aadhaar is already taken by another user
                     existing_user = User.query.filter(
                         User.aadhaar_number == new_value,
-                        User.auth_id != user.auth_id
+                        User.id != user.id
                     ).first()
                     if existing_user:
                         return jsonify({"error": "Aadhaar number already exists"}), 400
@@ -152,6 +154,7 @@ def update_profile():
         db.session.rollback()
         return jsonify({"error": "Failed to update profile", "details": str(e)}), 500
 
+
 @profile_bp.route("/profile/change-password", methods=["PUT"])
 @jwt_required()
 def change_password():
@@ -172,10 +175,11 @@ def change_password():
         if len(new_password) < 8:
             return jsonify({"error": "New password must be at least 8 characters long"}), 400
         
-        # Get user ID from JWT token
+        # Get user_id from JWT token
         current_user_id = get_jwt_identity()
-        auth = Auth.query.filter_by(user_id=current_user_id).first()
         
+        # Find auth record by user_id
+        auth = Auth.query.filter_by(user_id=current_user_id).first()
         if not auth:
             return jsonify({"error": "User not found"}), 404
         
@@ -183,7 +187,7 @@ def change_password():
         if not auth.check_password(current_password):
             return jsonify({"error": "Current password is incorrect"}), 400
         
-        # Update password in auth table
+        # Update password
         auth.set_password(new_password)
         db.session.commit()
         
@@ -192,6 +196,7 @@ def change_password():
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": "Failed to change password", "details": str(e)}), 500
+
 
 @profile_bp.route("/profile/delete", methods=["DELETE"])
 @jwt_required()
@@ -209,22 +214,24 @@ def delete_profile():
         if not password:
             return jsonify({"error": "Password is required to delete account"}), 400
         
-        # Get user ID from JWT token
+        # Get user_id from JWT token
         current_user_id = get_jwt_identity()
-        auth = Auth.query.filter_by(user_id=current_user_id).first()
         
+        # Find auth record by user_id
+        auth = Auth.query.filter_by(user_id=current_user_id).first()
         if not auth:
             return jsonify({"error": "User not found"}), 404
+            
+        user = User.query.filter_by(auth_id=auth.id).first()
+        if not user:
+            return jsonify({"error": "User profile not found"}), 404
         
         # Verify password
         if not auth.check_password(password):
             return jsonify({"error": "Incorrect password"}), 400
         
-        # Delete user first (due to foreign key relationship)
-        if auth.user:
-            db.session.delete(auth.user)
-        
-        # Delete auth record
+        # Delete user and auth (this will cascade delete related trips due to foreign key)
+        db.session.delete(user)
         db.session.delete(auth)
         db.session.commit()
         

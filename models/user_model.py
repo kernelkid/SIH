@@ -1,3 +1,4 @@
+# user_model.py
 from init_db import db
 from datetime import datetime
 from sqlalchemy import CheckConstraint
@@ -5,56 +6,63 @@ from sqlalchemy import CheckConstraint
 class User(db.Model):
     __tablename__ = "users"
     
+    # Primary key - this is what other tables should reference
+    id = db.Column(db.Integer, primary_key=True)
+    
     # Foreign key to Auth table
-    auth_id = db.Column(db.Integer, db.ForeignKey('auth.id'), primary_key=True)
+    auth_id = db.Column(db.Integer, db.ForeignKey('auth.id'), unique=True, nullable=False)
     
-    # Personal Details
-    name = db.Column(db.String(100), nullable=False)
-    phone_number = db.Column(db.String(15), nullable=False)
-    aadhaar_number = db.Column(db.String(12), unique=True, nullable=False)
-    date_of_birth = db.Column(db.Date, nullable=False)
-    gender = db.Column(db.String(10), nullable=False)
-    age = db.Column(db.Integer, nullable=False)
-    
-    # Relationships
-    trips = db.relationship("Trip", backref="user", lazy=True, foreign_keys='Trip.user_id')
+    # Personal Details - all nullable for initial signup
+    name = db.Column(db.String(100), nullable=True)
+    phone_number = db.Column(db.String(15), nullable=True)
+    aadhaar_number = db.Column(db.String(12), unique=True, nullable=True)
+    date_of_birth = db.Column(db.Date, nullable=True)
+    gender = db.Column(db.String(10), nullable=True)
+    age = db.Column(db.Integer, nullable=True)
     
     # Add constraints
     __table_args__ = (
-        CheckConstraint('LENGTH(aadhaar_number) = 12', name='aadhaar_length_check'),
-        CheckConstraint("gender IN ('Male', 'Female', 'Other')", name='gender_check'),
-        CheckConstraint('age >= 0 AND age <= 150', name='age_range_check'),
+        CheckConstraint('aadhaar_number IS NULL OR LENGTH(aadhaar_number) = 12', name='aadhaar_length_check'),
+        CheckConstraint("gender IS NULL OR gender IN ('Male', 'Female', 'Other')", name='gender_check'),
+        CheckConstraint('age IS NULL OR (age >= 0 AND age <= 150)', name='age_range_check'),
     )
 
-    def __init__(self, auth_id, name, phone_number, aadhaar_number, 
-                 date_of_birth, gender, age):
+    def __init__(self, auth_id, name=None, phone_number=None, aadhaar_number=None, 
+                 date_of_birth=None, gender=None, age=None):
         self.auth_id = auth_id
-        self.name = name.strip()
-        self.phone_number = phone_number.strip()
         
-        # Validate Aadhaar number
-        if not self._validate_aadhaar(aadhaar_number):
-            raise ValueError("Aadhaar number must be exactly 12 digits")
-        self.aadhaar_number = aadhaar_number.strip()
+        if name:
+            self.name = name.strip()
+        if phone_number:
+            self.phone_number = phone_number.strip()
+        
+        # Validate Aadhaar number if provided
+        if aadhaar_number:
+            if not self._validate_aadhaar(aadhaar_number):
+                raise ValueError("Aadhaar number must be exactly 12 digits")
+            self.aadhaar_number = aadhaar_number.strip()
         
         # Handle date of birth
-        if isinstance(date_of_birth, str):
-            try:
-                self.date_of_birth = datetime.strptime(date_of_birth, '%Y-%m-%d').date()
-            except ValueError:
-                raise ValueError("Date of birth must be in YYYY-MM-DD format")
-        else:
-            self.date_of_birth = date_of_birth
+        if date_of_birth:
+            if isinstance(date_of_birth, str):
+                try:
+                    self.date_of_birth = datetime.strptime(date_of_birth, '%Y-%m-%d').date()
+                except ValueError:
+                    raise ValueError("Date of birth must be in YYYY-MM-DD format")
+            else:
+                self.date_of_birth = date_of_birth
         
-        # Validate gender
-        if gender not in ['Male', 'Female', 'Other']:
-            raise ValueError("Gender must be 'Male', 'Female', or 'Other'")
-        self.gender = gender
+        # Validate gender if provided
+        if gender:
+            if gender not in ['Male', 'Female', 'Other']:
+                raise ValueError("Gender must be 'Male', 'Female', or 'Other'")
+            self.gender = gender
         
-        # Validate age
-        if not isinstance(age, int) or age < 0 or age > 150:
-            raise ValueError("Age must be a valid integer between 0 and 150")
-        self.age = age
+        # Validate age if provided
+        if age is not None:
+            if not isinstance(age, int) or age < 0 or age > 150:
+                raise ValueError("Age must be a valid integer between 0 and 150")
+            self.age = age
 
     def _validate_aadhaar(self, aadhaar_number):
         """Validate Aadhaar number - must be exactly 12 digits"""
@@ -64,19 +72,17 @@ class User(db.Model):
     
     def calculate_age_from_dob(self):
         """Calculate age from date of birth"""
+        if not self.date_of_birth:
+            return None
         today = datetime.now().date()
         return today.year - self.date_of_birth.year - ((today.month, today.day) < (self.date_of_birth.month, self.date_of_birth.day))
     
     def update_age_from_dob(self):
         """Update age field based on current date and DOB"""
-        self.age = self.calculate_age_from_dob()
+        if self.date_of_birth:
+            self.age = self.calculate_age_from_dob()
     
     # Properties to access auth data easily
-    @property
-    def id(self):
-        """Get the auth id"""
-        return self.auth.id if self.auth else None
-    
     @property
     def user_id(self):
         """Get the user_id from auth"""
@@ -86,10 +92,16 @@ class User(db.Model):
     def email(self):
         """Get the email from auth"""
         return self.auth.email if self.auth else None
+
+    def get_trips(self):
+        """Get all trips for this user"""
+        from models.trip_model import Trip
+        return Trip.query.filter_by(user_id=self.id).all()
     
     def to_dict(self, include_sensitive=False):
         """Convert object to dictionary (for JSON response / DB storage)"""
         user_dict = {
+            "id": self.id,
             "user_id": self.user_id,
             "email": self.email,
             "name": self.name,
