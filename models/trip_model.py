@@ -14,13 +14,14 @@ class Trip(db.Model):
     mode_of_travel = db.Column(db.String(50), nullable=False)
     vehicle_type = db.Column(db.String(50))
     accompanying_travellers = db.Column(db.JSON)  # Store as JSON array
+    trip_purpose = db.Column(db.String(200))
 
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
 
 
     def __init__(self, origin, destination, start_time, end_time,
                  mode_of_travel, vehicle_type=None, fuel_type=None,
-                 accompanying_travellers=None, trip_number=None, user_id=None):
+                 accompanying_travellers=None, trip_purpose=None, trip_number=None, user_id=None):
         self.trip_number = trip_number or f"TRIP-{random.randint(1000, 9999)}"
         self.origin = origin
         self.destination = destination
@@ -29,6 +30,7 @@ class Trip(db.Model):
         self.mode_of_travel = mode_of_travel
         self.vehicle_type = vehicle_type
         self.accompanying_travellers = accompanying_travellers or []
+        self.trip_purpose = trip_purpose
         self.user_id = user_id  # Assign the logged-in user’s ID
 
     def to_dict(self):
@@ -42,5 +44,6 @@ class Trip(db.Model):
             "mode_of_travel": self.mode_of_travel,
             "vehicle_type": self.vehicle_type,
             "accompanying_travellers": self.accompanying_travellers,
+            "trip_purpose":self.trip_purpose,
             "user_id": self.user_id
         }
