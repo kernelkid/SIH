@@ -1,14 +1,11 @@
-from flask import request, jsonify, session, g
-from werkzeug.security import check_password_hash
+from flask import request, jsonify
+from flask_jwt_extended import jwt_required, get_jwt_identity
+from models.auth_model import Auth
+from models.user_model import User
+from init_db import db
 import re
 from datetime import datetime
 from flask import Blueprint
-
-# Import JWT decorator from flask-jwt-extended
-from flask_jwt_extended import jwt_required, get_jwt_identity
-from models.user_model import User
-from init_db import db
-
 
 profile_bp = Blueprint('profile', __name__)
 
@@ -19,20 +16,19 @@ def get_profile():
     try:
         # Get user ID from JWT token
         current_user_id = get_jwt_identity()
-        user = User.query.filter_by(user_id=current_user_id).first()
+        auth = Auth.query.filter_by(user_id=current_user_id).first()
         
-        if not user:
+        if not auth or not auth.user:
             return jsonify({"error": "User not found"}), 404
         
         # Return user profile (includes sensitive data for the user themselves)
         return jsonify({
             "message": "Profile retrieved successfully",
-            "user": user.to_dict(include_sensitive=True)
+            "user": auth.user.to_dict(include_sensitive=True)
         }), 200
         
     except Exception as e:
         return jsonify({"error": "Failed to retrieve profile", "details": str(e)}), 500
-
 
 @profile_bp.route("/profile", methods=["PUT"])
 @jwt_required()
@@ -43,10 +39,12 @@ def update_profile():
         
         # Get user ID from JWT token
         current_user_id = get_jwt_identity()
-        user = User.query.filter_by(user_id=current_user_id).first()
+        auth = Auth.query.filter_by(user_id=current_user_id).first()
         
-        if not user:
+        if not auth or not auth.user:
             return jsonify({"error": "User not found"}), 404
+        
+        user = auth.user
         
         # Fields that can be updated
         updatable_fields = {
@@ -85,7 +83,7 @@ def update_profile():
                     # Check if Aadhaar is already taken by another user
                     existing_user = User.query.filter(
                         User.aadhaar_number == new_value,
-                        User.id != user.id
+                        User.auth_id != user.auth_id
                     ).first()
                     if existing_user:
                         return jsonify({"error": "Aadhaar number already exists"}), 400
@@ -116,7 +114,7 @@ def update_profile():
                     setattr(user, field, new_value)
                     updated_fields.append(field)
         
-        # Handle email update separately (might need additional verification)
+        # Handle email update separately (updates auth table)
         if 'email' in data:
             new_email = data['email'].strip().lower()
             
@@ -126,15 +124,15 @@ def update_profile():
                 return jsonify({"error": "Invalid email format"}), 400
             
             # Check if email is already taken by another user
-            existing_user = User.query.filter(
-                User.email == new_email,
-                User.id != user.id
+            existing_auth = Auth.query.filter(
+                Auth.email == new_email,
+                Auth.id != auth.id
             ).first()
-            if existing_user:
+            if existing_auth:
                 return jsonify({"error": "Email already exists"}), 400
             
-            if user.email != new_email:
-                user.email = new_email
+            if auth.email != new_email:
+                auth.email = new_email
                 updated_fields.append('email')
         
         # If no fields were updated
@@ -153,7 +151,6 @@ def update_profile():
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": "Failed to update profile", "details": str(e)}), 500
-
 
 @profile_bp.route("/profile/change-password", methods=["PUT"])
 @jwt_required()
@@ -177,17 +174,17 @@ def change_password():
         
         # Get user ID from JWT token
         current_user_id = get_jwt_identity()
-        user = User.query.filter_by(user_id=current_user_id).first()
+        auth = Auth.query.filter_by(user_id=current_user_id).first()
         
-        if not user:
+        if not auth:
             return jsonify({"error": "User not found"}), 404
         
         # Verify current password
-        if not user.check_password(current_password):
+        if not auth.check_password(current_password):
             return jsonify({"error": "Current password is incorrect"}), 400
         
-        # Update password
-        user.set_password(new_password)
+        # Update password in auth table
+        auth.set_password(new_password)
         db.session.commit()
         
         return jsonify({"message": "Password changed successfully"}), 200
@@ -195,7 +192,6 @@ def change_password():
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": "Failed to change password", "details": str(e)}), 500
-
 
 @profile_bp.route("/profile/delete", methods=["DELETE"])
 @jwt_required()
@@ -215,21 +211,22 @@ def delete_profile():
         
         # Get user ID from JWT token
         current_user_id = get_jwt_identity()
-        user = User.query.filter_by(user_id=current_user_id).first()
+        auth = Auth.query.filter_by(user_id=current_user_id).first()
         
-        if not user:
+        if not auth:
             return jsonify({"error": "User not found"}), 404
         
         # Verify password
-        if not user.check_password(password):
+        if not auth.check_password(password):
             return jsonify({"error": "Incorrect password"}), 400
         
-        # Delete user (this will cascade delete related trips due to relationship)
-        db.session.delete(user)
-        db.session.commit()
+        # Delete user first (due to foreign key relationship)
+        if auth.user:
+            db.session.delete(auth.user)
         
-        # Note: With JWT, tokens remain valid until expiry
-        # Consider implementing token blacklisting for immediate logout
+        # Delete auth record
+        db.session.delete(auth)
+        db.session.commit()
         
         return jsonify({"message": "Account deleted successfully"}), 200
         

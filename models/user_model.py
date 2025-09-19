@@ -1,26 +1,23 @@
-from werkzeug.security import generate_password_hash, check_password_hash
 from init_db import db
-import random
 from datetime import datetime
 from sqlalchemy import CheckConstraint
 
 class User(db.Model):
     __tablename__ = "users"
     
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.String(20), unique=True, nullable=False)
-    email = db.Column(db.String(120), unique=True, nullable=False)
-    password_hash = db.Column(db.String(400), nullable=False)
+    # Foreign key to Auth table
+    auth_id = db.Column(db.Integer, db.ForeignKey('auth.id'), primary_key=True)
     
     # Personal Details
     name = db.Column(db.String(100), nullable=False)
     phone_number = db.Column(db.String(15), nullable=False)
-    aadhaar_number = db.Column(db.String(12), nullable=False)
+    aadhaar_number = db.Column(db.String(12), unique=True, nullable=False)
     date_of_birth = db.Column(db.Date, nullable=False)
     gender = db.Column(db.String(10), nullable=False)
     age = db.Column(db.Integer, nullable=False)
     
-    trips = db.relationship("Trip", backref="user", lazy=True)
+    # Relationships
+    trips = db.relationship("Trip", backref="user", lazy=True, foreign_keys='Trip.user_id')
     
     # Add constraints
     __table_args__ = (
@@ -29,17 +26,16 @@ class User(db.Model):
         CheckConstraint('age >= 0 AND age <= 150', name='age_range_check'),
     )
 
-    def __init__(self, email, name, phone_number, aadhaar_number, date_of_birth, 
-                 gender, age, password=None, password_hash=None, user_id=None):
-        self.user_id = user_id or f"USER-{random.randint(1000, 9999)}"
-        self.email = email
-        self.name = name
-        self.phone_number = phone_number
+    def __init__(self, auth_id, name, phone_number, aadhaar_number, 
+                 date_of_birth, gender, age):
+        self.auth_id = auth_id
+        self.name = name.strip()
+        self.phone_number = phone_number.strip()
         
         # Validate Aadhaar number
         if not self._validate_aadhaar(aadhaar_number):
             raise ValueError("Aadhaar number must be exactly 12 digits")
-        self.aadhaar_number = aadhaar_number
+        self.aadhaar_number = aadhaar_number.strip()
         
         # Handle date of birth
         if isinstance(date_of_birth, str):
@@ -59,28 +55,12 @@ class User(db.Model):
         if not isinstance(age, int) or age < 0 or age > 150:
             raise ValueError("Age must be a valid integer between 0 and 150")
         self.age = age
-        
-        # Handle password
-        if password_hash:
-            self.password_hash = password_hash
-        elif password:
-            self.password_hash = generate_password_hash(password)
-        else:
-            raise ValueError("Either password or password_hash must be provided")
 
     def _validate_aadhaar(self, aadhaar_number):
         """Validate Aadhaar number - must be exactly 12 digits"""
         return (isinstance(aadhaar_number, str) and 
                 len(aadhaar_number) == 12 and 
                 aadhaar_number.isdigit())
-
-    def set_password(self, password):
-        """Hashes the password and stores it."""
-        self.password_hash = generate_password_hash(password)
-
-    def check_password(self, password):
-        """Checks a password against the stored hash."""
-        return check_password_hash(self.password_hash, password)
     
     def calculate_age_from_dob(self):
         """Calculate age from date of birth"""
@@ -90,6 +70,22 @@ class User(db.Model):
     def update_age_from_dob(self):
         """Update age field based on current date and DOB"""
         self.age = self.calculate_age_from_dob()
+    
+    # Properties to access auth data easily
+    @property
+    def id(self):
+        """Get the auth id"""
+        return self.auth.id if self.auth else None
+    
+    @property
+    def user_id(self):
+        """Get the user_id from auth"""
+        return self.auth.user_id if self.auth else None
+    
+    @property 
+    def email(self):
+        """Get the email from auth"""
+        return self.auth.email if self.auth else None
     
     def to_dict(self, include_sensitive=False):
         """Convert object to dictionary (for JSON response / DB storage)"""
