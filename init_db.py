@@ -18,7 +18,6 @@ def init_db(app: Flask, force: bool = False):
     # with app.app_context():
     #     print("Database initialized successfully!")
 
-
     with app.app_context():
         db.drop_all()
         db.create_all()
