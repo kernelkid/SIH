@@ -7,7 +7,9 @@ from init_db import db
 from utils.auth_utils import admin_required
 from services.admin_service import AdminService
 from utils.pagination_utils import format_pagination_response
+from routes.consent_routes import consent_bp
 import logging
+import datetime
 
 logger = logging.getLogger(__name__)
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
@@ -467,3 +469,128 @@ def delete_trip_by_id(trip_id):
         db.session.rollback()
         logger.error(f"Failed to delete trip ID {trip_id}: {e}")
         return jsonify({"error": "Failed to delete trip", "details": str(e)}), 500
+    
+
+# Admin: GET consent for specific user
+@consent_bp.route("/admin/consent/<int:user_id>", methods=["GET"])
+@admin_required
+def admin_get_user_consent(user_id):
+    try:
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+
+        consent = Consent.query.filter_by(user_id=user.id).first()
+
+        if not consent:
+            default_consent = {
+                "gps": False,
+                "notifications": False,
+                "motion_activity": False,
+                "ts": None
+            }
+            return jsonify({
+                "message": "No consent record found for user",
+                "user": {
+                    "user_id": user.user_id,
+                    "email": user.email
+                },
+                "consent": default_consent
+            }), 200
+
+        return jsonify({
+            "message": "Consent found",
+            "user": {
+                "user_id": user.user_id,
+                "email": user.email
+            },
+            "consent": consent.to_dict()
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Admin failed to fetch consent for user ID {user_id}: {e}")
+        return jsonify({"error": "Failed to fetch user consent", "details": str(e)}), 500
+
+
+# Admin: SET consent for specific user (ONLY for technical support/account recovery)
+@consent_bp.route("/admin/consent/<int:user_id>", methods=["POST"])
+@admin_required
+def admin_set_user_consent(user_id):
+    try:
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+
+        data = request.get_json(force=True) or {}
+        
+        # Require admin to provide a reason for consent modification
+        admin_reason = data.get("admin_reason", "").strip()
+        if not admin_reason:
+            return jsonify({"error": "admin_reason is required for consent modification"}), 400
+
+        # Find existing or create new consent
+        consent = Consent.query.filter_by(user_id=user.id).first()
+        if not consent:
+            consent = Consent(user_id=user.id)
+            db.session.add(consent)
+
+        # Set consent values (default to False if not provided)
+        consent.gps = bool(data.get("gps", False))
+        consent.notifications = bool(data.get("notifications", False))
+        consent.motion_activity = bool(data.get("motion_activity", False))
+        consent.ts = datetime.utcnow()
+
+        db.session.commit()
+
+        # Log admin action with reason
+        logger.warning(f"ADMIN ACTION: Admin modified consent for user {user.user_id}. Reason: {admin_reason}. New settings: GPS={consent.gps}, Notifications={consent.notifications}, Motion={consent.motion_activity}")
+
+        return jsonify({
+            "message": f"Consent modified for user {user.user_id} (Admin action)",
+            "warning": "This action should only be used for technical support or account recovery",
+            "user": {
+                "user_id": user.user_id,
+                "email": user.email
+            },
+            "consent": consent.to_dict(),
+            "admin_reason": admin_reason
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Admin failed to set consent for user ID {user_id}: {e}")
+        return jsonify({"error": "Failed to set user consent", "details": str(e)}), 500
+
+
+
+
+# Admin: DELETE consent for specific user
+@consent_bp.route("/admin/consent/<int:user_id>", methods=["DELETE"])
+@admin_required
+def admin_delete_user_consent(user_id):
+    try:
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+
+        consent = Consent.query.filter_by(user_id=user.id).first()
+        if not consent:
+            return jsonify({"error": "No consent record found for this user"}), 404
+
+        db.session.delete(consent)
+        db.session.commit()
+
+        logger.info(f"Admin deleted consent record for user {user.user_id}")
+
+        return jsonify({
+            "message": f"Consent record deleted for user {user.user_id}",
+            "user": {
+                "user_id": user.user_id,
+                "email": user.email
+            }
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Admin failed to delete consent for user ID {user_id}: {e}")
+        return jsonify({"error": "Failed to delete user consent", "details": str(e)}), 500
