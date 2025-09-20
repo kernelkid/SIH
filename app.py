@@ -7,6 +7,7 @@ from routes.trip_routes import trip_bp
 from routes.admin_routes import admin_bp
 from routes.admin_signup_routes import admin_signup_bp
 from routes.profile_routes import profile_bp
+from routes.user_routes import user_bp
 from routes.tracking import tracking_bp
 from flask import Flask, render_template
 from init_db import init_db
@@ -28,6 +29,7 @@ app.register_blueprint(trip_bp, url_prefix="/")
 app.register_blueprint(admin_bp, url_prefix="/admin")
 app.register_blueprint(admin_signup_bp, url_prefix="/")
 app.register_blueprint(profile_bp, url_prefix="/")
+app.register_blueprint(user_bp, url_prefix="/user")
 
 if __name__ == "__main__":
     app.run(debug=True)

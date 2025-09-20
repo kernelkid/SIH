@@ -13,7 +13,7 @@ class Trip(db.Model):
     end_time = db.Column(db.String(50), nullable=False)
     mode_of_travel = db.Column(db.String(50), nullable=False)
     vehicle_type = db.Column(db.String(50))
-    accompanying_travellers = db.Column(db.JSON)
+    accompanying_travellers = db.Column(db.JSON) 
     trip_purpose = db.Column(db.String(200))
     additional_info = db.Column(db.String(500))
 
