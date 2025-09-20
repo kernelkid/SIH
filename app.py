@@ -8,8 +8,7 @@ from routes.admin_routes import admin_bp
 from routes.admin_signup_routes import admin_signup_bp
 from routes.profile_routes import profile_bp
 from routes.user_routes import user_bp
-from routes.tracking import tracking_bp
-from flask import Flask, render_template
+from flask import Flask
 from init_db import init_db
 from datetime import timedelta
 

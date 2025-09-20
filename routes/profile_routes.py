@@ -9,6 +9,97 @@ from datetime import datetime
 
 profile_bp = Blueprint('profile', __name__)
 
+
+
+@profile_bp.route("/profile", methods=["POST"])
+@jwt_required()
+def create_profile():
+    """Create initial user profile after registration"""
+    try:
+        data = request.get_json(force=True)
+        
+        # Get user_id from JWT token
+        current_user_id = get_jwt_identity()
+        
+        # Find auth record by user_id
+        auth = Auth.query.filter_by(user_id=current_user_id).first()
+        if not auth:
+            return jsonify({"error": "User authentication not found"}), 404
+        
+        # Check if user profile already exists
+        if auth.user:
+            return jsonify({"error": "Profile already exists. Use PUT to update."}), 409
+        
+        # Required fields for profile creation
+        required_fields = ['name', 'phone_number', 'aadhaar_number', 'date_of_birth', 'gender', 'age']
+        missing_fields = [field for field in required_fields if field not in data or not data[field]]
+        
+        if missing_fields:
+            return jsonify({"error": f"Missing required fields: {', '.join(missing_fields)}"}), 400
+        
+        # Validate phone number
+        phone_number = data['phone_number']
+        if not (isinstance(phone_number, str) and phone_number.isdigit() and 10 <= len(phone_number) <= 15):
+            return jsonify({"error": "Phone number must be 10-15 digits"}), 400
+        
+        # Validate Aadhaar number
+        aadhaar_number = data['aadhaar_number']
+        if not (isinstance(aadhaar_number, str) and len(aadhaar_number) == 12 and aadhaar_number.isdigit()):
+            return jsonify({"error": "Aadhaar number must be exactly 12 digits"}), 400
+        
+        # Check if Aadhaar is already taken
+        existing_user = User.query.filter_by(aadhaar_number=aadhaar_number).first()
+        if existing_user:
+            return jsonify({"error": "Aadhaar number already exists"}), 400
+        
+        # Validate date of birth
+        try:
+            datetime.strptime(data['date_of_birth'], '%Y-%m-%d')
+        except ValueError:
+            return jsonify({"error": "Date of birth must be in YYYY-MM-DD format"}), 400
+        
+        # Validate gender
+        if data['gender'] not in ['Male', 'Female', 'Other']:
+            return jsonify({"error": "Gender must be 'Male', 'Female', or 'Other'"}), 400
+        
+        # Validate age
+        try:
+            age = int(data['age'])
+            if not (0 <= age <= 150):
+                return jsonify({"error": "Age must be between 0 and 150"}), 400
+        except (ValueError, TypeError):
+            return jsonify({"error": "Age must be a valid number"}), 400
+        
+        # Validate name
+        name = data['name'].strip()
+        if len(name) < 1:
+            return jsonify({"error": "Name cannot be empty"}), 400
+        
+        # Create new user profile
+        new_user = User(
+            auth_id=auth.id,
+            name=name,
+            phone_number=phone_number,
+            aadhaar_number=aadhaar_number,
+            date_of_birth=data['date_of_birth'],
+            gender=data['gender'],
+            age=age
+        )
+        
+        db.session.add(new_user)
+        db.session.commit()
+        
+        return jsonify({
+            "message": "Profile created successfully",
+            "user": new_user.to_dict(include_sensitive=True)
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": "Failed to create profile", "details": str(e)}), 500
+    
+
+
 @profile_bp.route("/profile", methods=["GET"])
 @jwt_required()
 def get_profile():

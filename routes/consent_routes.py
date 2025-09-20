@@ -3,6 +3,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from init_db import db
 from models.user_model import User
 from models.consent_model import Consent
+from models.auth_model import Auth  # You'll need to import Auth model
 from utils.auth_utils import admin_required
 from datetime import datetime
 import logging
@@ -15,9 +16,12 @@ consent_bp = Blueprint("consent", __name__)
 @jwt_required()
 def get_consent():
     try:
-        current_user_email = get_jwt_identity()
-        user = User.query.filter_by(email=current_user_email).first()
-
+        current_user_id = get_jwt_identity()
+        auth = Auth.query.filter_by(user_id=current_user_id).first()
+        if not auth:
+            return jsonify({"error": "Auth record not found"}), 404
+            
+        user = User.query.filter_by(auth_id=auth.id).first()
         if not user:
             return jsonify({"error": "User not found"}), 404
 
@@ -36,7 +40,6 @@ def get_consent():
         return jsonify({"consent": consent.to_dict()}), 200
 
     except Exception as e:
-        logger.error(f"Failed to fetch consent for user {current_user_email}: {e}")
         return jsonify({"error": "Failed to fetch consent", "details": str(e)}), 500
 
 
@@ -45,9 +48,17 @@ def get_consent():
 @jwt_required()
 def update_consent():
     try:
-        current_user_email = get_jwt_identity()
-        user = User.query.filter_by(email=current_user_email).first()
-
+        current_user_id = get_jwt_identity()
+        print(f"DEBUG: JWT contains: '{current_user_id}' (type: {type(current_user_id)})")
+        
+        # Find auth record by user_id
+        auth = Auth.query.filter_by(user_id=current_user_id).first()
+        print(f"DEBUG: Found auth record: {auth}")
+        
+        if not auth:
+            return jsonify({"error": "Auth record not found"}), 404
+            
+        user = User.query.filter_by(auth_id=auth.id).first()
         if not user:
             return jsonify({"error": "User not found"}), 404
 
@@ -85,5 +96,4 @@ def update_consent():
 
     except Exception as e:
         db.session.rollback()
-        logger.error(f"Failed to update consent for user {current_user_email}: {e}")
         return jsonify({"error": "Failed to update consent", "details": str(e)}), 500
